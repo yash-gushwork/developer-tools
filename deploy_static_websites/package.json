@@ -1,0 +1,24 @@
+{
+  "name": "deploy_static_websites",
+  "version": "1.0.0",
+  "description": "Script to upload folder contents to S3 with cache control headers",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "s3",
+    "upload",
+    "aws"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-cloudfront": "^3.478.0",
+    "@aws-sdk/client-s3": "^3.478.0",
+    "dotenv": "^17.2.2",
+    "mime-types": "^2.1.35"
+  }
+}
