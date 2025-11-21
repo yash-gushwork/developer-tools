@@ -50,16 +50,28 @@ class S3Uploader {
       const contentType = mime.lookup(filePath) || 'application/octet-stream';
       const cacheControl = this.getCacheControlHeader(filePath, isAstroFolder);
 
-      const command = new PutObjectCommand({
+      const commandParams = {
         Bucket: this.bucketName,
         Key: s3Key,
         Body: fileContent,
         ContentType: contentType,
         CacheControl: cacheControl,
-      });
+      };
+
+      // Add Access-Control-Allow-Origin header for non-HTML files
+      if (!this.isHtmlFile(filePath)) {
+        commandParams.Metadata = {
+          'access-control-allow-origin': '*'
+        };
+        // Also set it as a custom header that CloudFront can use
+        commandParams.Metadata['x-amz-meta-access-control-allow-origin'] = '*';
+      }
+
+      const command = new PutObjectCommand(commandParams);
 
       await this.s3Client.send(command);
-      console.log(`✅ Uploaded: ${s3Key} (${contentType}, ${cacheControl})`);
+      const corsInfo = !this.isHtmlFile(filePath) ? ', CORS: *' : '';
+      console.log(`✅ Uploaded: ${s3Key} (${contentType}, ${cacheControl}${corsInfo})`);
       this.uploadedCount++;
       return true;
     } catch (error) {
@@ -168,6 +180,24 @@ class S3Uploader {
 
     const startTime = Date.now();
 
+    // Get all items in dist folder
+    const distItems = fs.readdirSync(distPath);
+    
+    // Separate files and folders
+    const rootFiles = [];
+    const rootFolders = [];
+    
+    for (const item of distItems) {
+      const itemPath = path.join(distPath, item);
+      const stats = fs.statSync(itemPath);
+      
+      if (stats.isFile()) {
+        rootFiles.push(item);
+      } else if (stats.isDirectory() && item !== '_astro' && item !== 'category') {
+        rootFolders.push(item);
+      }
+    }
+
     // Delete existing folders on S3
     if (astroExists) {
       console.log('🗑️  Deleting existing _astro folder from S3...');
@@ -181,7 +211,54 @@ class S3Uploader {
       await this.deleteObjectsWithPrefix(categoryS3Prefix);
     }
 
+    // Delete existing root files and other folders on S3
+    if (rootFiles.length > 0 || rootFolders.length > 0) {
+      console.log('🗑️  Deleting existing root files and folders from S3...');
+      const baseS3Prefix = s3Path.endsWith('/') ? s3Path : `${s3Path}/`;
+      
+      // Delete root files
+      for (const file of rootFiles) {
+        const fileS3Key = `${baseS3Prefix}${file}`;
+        try {
+          await this.s3Client.send(new DeleteObjectCommand({
+            Bucket: this.bucketName,
+            Key: fileS3Key,
+          }));
+        } catch (error) {
+          // Ignore errors for files that don't exist
+        }
+      }
+      
+      // Delete other root folders
+      for (const folder of rootFolders) {
+        const folderS3Prefix = `${baseS3Prefix}${folder}/`;
+        await this.deleteObjectsWithPrefix(folderS3Prefix);
+      }
+    }
+
     console.log('');
+
+    // Upload root files
+    if (rootFiles.length > 0) {
+      console.log('📤 Uploading root files...');
+      const baseS3Prefix = s3Path.endsWith('/') ? s3Path : `${s3Path}/`;
+      for (const file of rootFiles) {
+        const filePath = path.join(distPath, file);
+        const fileS3Key = `${baseS3Prefix}${file}`;
+        await this.uploadFile(filePath, fileS3Key, false);
+      }
+    }
+
+    // Upload other root folders
+    if (rootFolders.length > 0) {
+      console.log('📤 Uploading other root folders...');
+      const baseS3Prefix = s3Path.endsWith('/') ? s3Path : `${s3Path}/`;
+      for (const folder of rootFolders) {
+        const folderPath = path.join(distPath, folder);
+        const folderS3Prefix = `${baseS3Prefix}${folder}`;
+        await this.uploadDirectory(folderPath, folderS3Prefix, false);
+      }
+    }
 
     // Upload new folders
     if (astroExists) {

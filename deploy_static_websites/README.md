@@ -12,7 +12,7 @@ node index.js <dist-path> <s3-path> <bucket-name> [region] [distribution-id] [in
 ```bash
 node index.js /Users/yashsharma/Desktop/work/themes/dist website/mangalampipes-ys1ih/ gw-content-store us-east-1 E1DTLETE7MR3SY "/website/mangalampipes-ys1ih/*"
 ```
-
+expandastands-fitmsf
 ## Features
 
 - Recursively uploads all files from a folder to S3
